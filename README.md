@@ -1,49 +1,86 @@
-프론트엔드 배포 파이프라인
+# 프론트엔드 배포 파이프라인
 
-📋 프로젝트 개요
-본 프로젝트는 Next.js 기반 프론트엔드 애플리케이션을 AWS 인프라와 GitHub Actions를 활용하여 자동화된 배포 파이프라인을 구축한 사례입니다. 코드 변경사항이 메인 브랜치에 푸시될 때마다 자동으로 빌드, 배포, 캐시 무효화가 진행되는 CI/CD 파이프라인을 구현했습니다.
+본 프로젝트는 Next.js 기반 프론트엔드 애플리케이션을 AWS 인프라와 GitHub Actions를 활용하여 자동화된 배포 파이프라인을 구축한 사례입니다. 
+코드 변경사항이 메인 브랜치에 푸시될 때마다 자동으로 빌드, 배포, 캐시 무효화가 진행되는 CI/CD 파이프라인을 구현했습니다.
 
-🔄 배포 파이프라인 프로세스
-자동 배포 워크플로우
+## 배포 파이프라인 프로세스
+![프론트엔드-배포-워크플로우](프론트엔드-배포-워크플로어.png)
 
-![프론트엔드-배포-](프론트엔드-배포-워크플로어.png)
 
-GitHub Actions에 워크플로우를 작성해 다음과 같이 배포가 진행되도록 구성했습니다:
-사전작업: Ubuntu 최신 버전 환경 설정
+GitHub Actions에 워크플로우를 작성해 다음과 같이 배포가 진행되도록 구성했습니다.
 
-Checkout 액션을 사용해 코드 내려받기
+```
+name: Deploy Next.js to S3 and invalidate CloudFront
 
-actions/checkout@v4를 사용하여 저장소 코드를 워크플로우 환경으로 가져옴
+on:
+  push:
+    branches:
+      - main # 또는 master, 프로젝트의 기본 브랜치 이름에 맞게 조정
+  workflow_dispatch:
 
-npm ci 명령어로 프로젝트 의존성 설치
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-package-lock.json을 기반으로 정확한 버전의 의존성 설치
-npm install보다 빠르고 안전한 CI 환경용 명령어 사용
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-npm run build 명령어로 Next.js 프로젝트 빌드
+      - name: Install dependencies
+        run: npm ci
 
-Next.js 정적 사이트 생성 (Static Site Generation)
-out/ 디렉토리에 빌드 결과물 생성
+      - name: Build
+        run: npm run build
 
-AWS 자격 증명 구성
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-aws-actions/configure-aws-credentials@v4 액션 사용
-GitHub Secrets에 저장된 AWS 인증 정보 활용
+      - name: Deploy to S3
+        run: |
+          aws s3 sync out/ s3://${{ secrets.S3_BUCKET_NAME }} --delete
 
-빌드된 파일을 S3 버킷에 동기화
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
 
-aws s3 sync 명령어로 out/ 디렉토리를 S3 버킷에 업로드
---delete 옵션으로 불필요한 파일 정리
 
-CloudFront 캐시 무효화
+```
 
-aws cloudfront create-invalidation 명령어 실행
-모든 경로(/\*)에 대한 캐시 무효화로 즉시 업데이트 반영
+## GitHub Actions 워크플로우 실행 과정
+
+### 🚀 배포 파이프라인 단계별 실행 과정
+
+| 단계 | 액션명 | 실행 내용 | 사용 도구/명령어 | 소요 시간 | 설명 |
+|------|--------|-----------|------------------|-----------|------|
+| **1** | Checkout repository | 소스 코드 다운로드 | `actions/checkout@v4` | ~10초 | GitHub 저장소에서 최신 코드를 워크플로우 환경으로 가져옴 |
+| **2** | Install dependencies | 의존성 패키지 설치 | `npm ci` | ~30-60초 | package-lock.json 기반으로 정확한 버전의 패키지 설치 |
+| **3** | Build | Next.js 프로젝트 빌드 | `npm run build` | ~1-3분 | Next.js를 정적 사이트로 빌드하여 out/ 디렉토리 생성 |
+| **4** | Configure AWS credentials | AWS 인증 설정 | `aws-actions/configure-aws-credentials@v4` | ~5초 | GitHub Secrets의 AWS 인증 정보로 AWS CLI 설정 |
+| **5** | Deploy to S3 | S3 버킷 업로드 | `aws s3 sync` | ~30-120초 | 빌드 파일을 S3 버킷에 동기화 및 기존 파일 정리 |
+| **6** | Invalidate CloudFront cache | CDN 캐시 무효화 | `aws cloudfront create-invalidation` | ~10초 | CloudFront 캐시 무효화 요청 (실제 완료는 5-10분 소요) |
+
+
+
+### 🔑 필수 GitHub Secrets 설정
+
+| Secret 이름 | 설명 | 예시 값 |
+|-------------|------|---------|
+| `AWS_ACCESS_KEY_ID` | AWS IAM 사용자 Access Key | `AKIA...` |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM 사용자 Secret Key | `wJalrXUt...` |
+| `AWS_REGION` | AWS 리전 | `ap-northeast-2` |
+| `S3_BUCKET_NAME` | S3 버킷 이름 | `my-frontend-bucket` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | CloudFront 배포 ID | `E1234567890ABC` |
+
 
 주요 링크
 
-S3 버킷 웹사이트 엔드포인트: http://[BUCKET_NAME].s3-website-[REGION].amazonaws.com
-CloudFront 배포 도메인 이름: https://[DISTRIBUTION_ID].cloudfront.net
+S3 버킷 웹사이트 엔드포인트: http://front-5th-chapter-4.s3-website.ap-northeast-2.amazonaws.com
+CloudFront 배포 도메인 이름: https://d39e279oad27j5.cloudfront.net
+
 
 📚 주요 개념
 GitHub Actions과 CI/CD 도구
