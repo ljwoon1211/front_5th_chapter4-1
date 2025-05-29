@@ -95,11 +95,11 @@ CloudFront 배포 도메인 이름: https://d39e279oad27j5.cloudfront.net
   S3와 스토리지
 
 - Amazon S3 (Simple Storage Service)는 객체 스토리지 서비스로, 정적 웹사이트 호스팅 기능을 제공합니다. HTML, CSS, JavaScript 파일을 저장하고 웹에서 직접 접근할 수 있도록 구성할 수 있습니다.
+  deployment.yml의 Deploy to S3 단계에서 aws s3 sync out/ s3://${{ secrets.S3_BUCKET_NAME }} --delete 명령어를 통해 Next.js 빌드 결과물( out/ 디렉토리)을 지정된 S3 버킷에 업로드하고 동기화하는 데 사용됩니다.
+  --delete 옵션은 S3 버킷에는 있지만 로컬 빌드 결과물에는 없는 파일을 삭제하여 일관성을 유지합니다."
 
 - CloudFront와 CDN
   Amazon CloudFront는 AWS의 CDN(Content Delivery Network) 서비스입니다. 전 세계 엣지 로케이션에 콘텐츠를 캐싱하여 사용자에게 더 빠른 응답 속도를 제공합니다.
-  캐시 무효화(Cache Invalidation)
-  CDN에서 캐시된 콘텐츠를 강제로 삭제하는 과정입니다. 새로운 배포 시 이전 버전의 캐시된 파일이 아닌 최신 파일이 사용자에게 전달되도록 보장합니다.
 
 - Repository Secret과 환경변수
   GitHub에서 제공하는 보안 기능으로, API 키, 비밀번호 등 민감한 정보를 암호화하여 저장합니다. 워크플로우에서 ${{ secrets.VARIABLE_NAME }}으로 접근할 수 있습니다.
@@ -240,3 +240,5 @@ IAM 정책 구성
   ]
 }
 ```
+
+
